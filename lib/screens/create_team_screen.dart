@@ -18,7 +18,6 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
 
   late List<Player> _players;
   late String _teamName;
-  final bool _isLoading = false;
 
   @override
   void initState() {
@@ -40,10 +39,23 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
   }
 
   void _addPlayer() async {
-    _showAddPlayerDialog();
+    final Player? newPlayer = await _showAddPlayerDialog();
+
+    if (newPlayer != null && mounted) {
+      setState(() {
+        _players.add(newPlayer);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${newPlayer.summonerName} adicionado!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
   }
 
-  Future<void> _showAddPlayerDialog() async {
+  Future<Player?> _showAddPlayerDialog() async {
     final dialogFormKey = GlobalKey<FormState>();
     final summonerNameController = TextEditingController();
     String? selectedRole;
@@ -51,9 +63,9 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
 
     const List<String> roles = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'];
 
-    await showDialog<void>(
+    final result = await showDialog<Player?>(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (BuildContext dialogContext) {
         return StatefulBuilder(
           builder: (BuildContext sbContext, StateSetter setDialogState) {
@@ -67,13 +79,17 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
                     TextFormField(
                       controller: summonerNameController,
                       decoration: const InputDecoration(
-                        labelText: 'Nome de Invocador',
-                        hintText: 'Ex: Scout',
+                        labelText: 'Riot ID (Nome#TAG)',
+                        hintText: 'Ex: Faker#BR1',
                         border: OutlineInputBorder(),
+                        helperText: 'Não esqueça da TAG (ex: #BR1)',
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Por favor, insira um nome de invocador';
+                          return 'Insira o Riot ID';
+                        }
+                        if (!value.contains('#')) {
+                          return 'Use o formato Nome#Tag';
                         }
                         return null;
                       },
@@ -103,6 +119,14 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
                         return null;
                       },
                     ),
+                    if (isLoading)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 16.0),
+                        child: Text(
+                          'Buscando na Riot Games...',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -119,10 +143,20 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
                   TextButton(
                     child: const Text('Cancelar'),
                     onPressed: () {
-                      Navigator.of(dialogContext).pop();
+                      Navigator.of(dialogContext).pop(null);
                     },
                   ),
                   ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     child: const Text('Adicionar'),
                     onPressed: () async {
                       if (dialogFormKey.currentState!.validate()) {
@@ -137,41 +171,27 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
                           final player = await _apiService
                               .fetchPlayerBySummonerName(summonerName, role);
 
-                          if (!mounted) return;
-
-                          setState(() {
-                            _players.add(player);
-                          });
-
                           if (dialogContext.mounted) {
-                            Navigator.of(dialogContext).pop();
+                            Navigator.of(dialogContext).pop(player);
                           }
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                '${player.summonerName} adicionado!',
-                              ),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
                         } catch (e) {
-                          if (context.mounted) {
+                          if (sbContext.mounted) {
                             setDialogState(() {
                               isLoading = false;
                             });
                           }
 
-                          if (!mounted) return;
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Erro ao buscar jogador!',
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Erro ao buscar jogador! Verifique o Nome#TAG.',
+                                ),
+                                backgroundColor: Colors.red,
+                                duration: Duration(seconds: 2),
                               ),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
+                            );
+                          }
                         }
                       }
                     },
@@ -185,6 +205,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
     );
 
     summonerNameController.dispose();
+    return result;
   }
 
   void _removePlayer(int index) {
@@ -195,19 +216,27 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
 
   void _saveTeam() {
     if (_formKey.currentState!.validate()) {
-      final newTeam = Team(name: _teamNameController.text, players: _players);
+      final newTeam = Team(
+        id: widget.initialTeam?.id,
+        userId: widget.initialTeam?.userId ?? '',
+        name: _teamNameController.text,
+        players: _players,
+      );
       Navigator.of(context).pop(newTeam);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
           widget.initialTeam != null ? 'Editar Time' : 'Criar Novo Time',
         ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -239,7 +268,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.person_add, color: Colors.green),
+                    icon: Icon(Icons.person_add, color: Colors.green),
                     onPressed: _addPlayer,
                     tooltip: 'Adicionar Jogador',
                   ),
@@ -247,37 +276,36 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
               ),
               const Divider(),
               Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : ListView.builder(
-                        itemCount: _players.length,
-                        itemBuilder: (context, index) {
-                          final player = _players[index];
-                          return ListTile(
-                            leading: CircleAvatar(
-                              child: Text(player.role.substring(0, 1)),
-                            ),
-                            title: Text(player.summonerName),
-                            subtitle: Text(player.rank),
-                            trailing: IconButton(
-                              icon: const Icon(
-                                Icons.remove_circle_outline,
-                                color: Colors.red,
-                              ),
-                              onPressed: () => _removePlayer(index),
-                            ),
-                          );
-                        },
+                child: ListView.builder(
+                  itemCount: _players.length,
+                  itemBuilder: (context, index) {
+                    final player = _players[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: colorScheme.primaryContainer,
+                          foregroundColor: colorScheme.onPrimaryContainer,
+                          child: Text(player.role.substring(0, 1)),
+                        ),
+                        title: Text(player.summonerName),
+                        subtitle: Text(player.rank),
+                        trailing: IconButton(
+                          icon: const Icon(
+                            Icons.remove_circle_outline,
+                            color: Colors.red,
+                          ),
+                          onPressed: () => _removePlayer(index),
+                        ),
                       ),
+                    );
+                  },
+                ),
               ),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _saveTeam,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Theme.of(context).colorScheme.secondary,
-                  ),
                   child: const Text('Salvar Time'),
                 ),
               ),

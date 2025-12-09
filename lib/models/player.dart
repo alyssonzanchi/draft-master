@@ -12,4 +12,24 @@ class Player {
     required this.level,
     required this.topChampions,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'summonerName': summonerName,
+      'role': role,
+      'rank': rank,
+      'level': level,
+      'topChampions': topChampions,
+    };
+  }
+
+  factory Player.fromMap(Map<String, dynamic> map) {
+    return Player(
+      summonerName: map['summonerName'] ?? '',
+      role: map['role'] ?? '',
+      rank: map['rank'] ?? 'Unranked',
+      level: (map['level'] ?? 0).toInt(),
+      topChampions: List<String>.from(map['topChampions'] ?? []),
+    );
+  }
 }
