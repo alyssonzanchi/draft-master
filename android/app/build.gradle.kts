@@ -23,7 +23,7 @@ android {
     }
 
     signingConfigs {
-        create("debug") {
+        getByName("debug") {
             // Procura o arquivo 'debug.keystore' na pasta do app
             storeFile = file("debug.keystore")
             storePassword = "android"
